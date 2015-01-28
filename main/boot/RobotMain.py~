@@ -1,0 +1,29 @@
+import Queue
+import threading
+import time
+
+from main.hardware.MicroDue import MicroDue  # @UnusedImport
+from main.model.Game import Game
+from main.model.Robot import Robot
+from main.network.ThreadedClientRobot import ThreadedClientRobot
+
+
+queue = Queue.Queue()
+robot = Robot(queue)
+game = Game(robot, queue)
+
+client = ThreadedClientRobot(queue, game)
+robotConnectionThread = threading.Thread(target = client.run)
+robotConnectionThread.start()
+# MicroDue = MicroDue()
+#Main running the actions of the game
+indice=1
+while True: 
+    if game.isInProcess():       
+        message = "Allo #" + str(indice)
+	print message
+        game.robot.microDue.writeLCD(message)
+	indice = indice + 1
+	print "2"
+#         game.doAction()
+

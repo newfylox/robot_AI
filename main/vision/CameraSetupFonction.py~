@@ -1,0 +1,141 @@
+'''
+Created on 2014-03-07
+
+@author: admin
+'''
+
+import cv2
+import numpy as np
+
+class Camera(object):
+    '''
+    classdocs
+    '''
+
+
+    def __init__(self):
+        self.camera = cv2.VideoCapture(0)
+        #only for test 
+        self.calibrate()
+        
+        
+    def calibrate(self):
+        self.camera.set(cv2.cv.CV_CAP_PROP_BRIGHTNESS,126)
+        self.camera.set(cv2.cv.CV_CAP_PROP_CONTRAST,41)
+        self.camera.set(cv2.cv.CV_CAP_PROP_SATURATION,93)
+        self.camera.set(cv2.cv.CV_CAP_PROP_HUE,13)
+        self.camera.set(cv2.cv.CV_CAP_PROP_GAIN,140)
+        self.camera.set(cv2.cv.CV_CAP_PROP_EXPOSURE,-5)
+        
+    def FindCalibrationMatrix(self):
+        Square_size = 2.7
+        objp = np.zeros((6*7,3), np.float32)
+        objp[:,:2] = np.mgrid[0:7,0:6].T.reshape(-1,2)
+        objp *= Square_size
+        objpoints = [] # 3d point in real world space
+        imgpoints = [] # 2d points in image plane.
+        while(True):
+            _, frame = self.camera.read()
+            gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+            valCorner, corners = cv2.findChessboardCorners(gray, (7,6),None)
+            if valCorner == True:
+                objpoints.append(objp)
+                imgpoints.append(corners)
+                break
+        _, mtx, _, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
+        rvecs = rvecs[0]
+        tvecs = tvecs[0]
+        R,_ = cv2.Rodrigues(rvecs)
+        extrinsecparameter = np.hstack([R,tvecs])
+        finalmatrix =  np.dot(mtx,extrinsecparameter)
+        return finalmatrix
+        print("\n the Calibration matrix is find")
+        cv2.imshow('imageResultante', gray)
+    def FindReferenceDotX(self,CalibrationMatrix):
+        Xmin = 100
+        vXFind = 0
+        m = CalibrationMatrix
+        for u in range (1,600):
+            for v in range (1,419):
+                Xrealnum = (-m[0][3]+u*m[2][3])*(m[1][1]-v*m[2][1]) - (m[1][3]-v*m[2][3])*(-m[0][1]+u*m[2][1])
+                Xrealdenum = (m[0][0]-u*m[2][0])*(m[1][1]-v*m[2][1]) + (m[0][1]-u*m[2][1])*(-m[1][0]+v*m[2][0])
+                Xreal = Xrealnum/Xrealdenum
+                if abs(Xreal) < Xmin:
+                    Xmin = abs(Xreal)
+                    vXFind = v
+        return vXFind
+        print("the v dot is find")
+    def FindReferenceDotY(self,CalibrationMatrix,vDot):
+        Ymin = 100
+        uYFind = 0
+        v = vDot
+        m = CalibrationMatrix
+        for u in range (1,600): 
+            Yrealnum = (-m[0][3]+u*m[2][3])*(-m[1][0]+v*m[2][0]) - (m[1][3]-v*m[2][3])*(m[0][0]-u*m[2][0])
+            Yrealdenum = (m[0][0]-u*m[2][0])*(m[1][1]-v*m[2][1]) + (m[0][1]-u*m[2][1])*(-m[1][0]+v*m[2][0])  
+            Yreal = Yrealnum/Yrealdenum
+            if abs(Yreal) < Ymin:
+                Ymin = abs(Yreal)
+                uYFind = u
+        return uYFind      
+        print("the u dot is find")      
+    def ShowRefenceDotToSearchRealDistanceXandRealDistanceY(self,uDot,vDot):
+        while (True):
+            _, frame = self.camera.read()
+            cv2.circle(frame,(uDot,vDot),5,(0,255,0),-1)
+            cv2.imshow("Find X and Y Distance Between The Robot and the Dot ,Press q to finish",frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    def FindHSVParameterToThresholdAnColor(self): 
+        def nothing(x):
+            pass
+        cv2.namedWindow('image', cv2.cv.CV_WINDOW_NORMAL) 
+        cv2.createTrackbar('H_MID','image',0,255,nothing)
+        cv2.createTrackbar('S_MIN','image',0,255,nothing)
+        cv2.createTrackbar('V_MIN','image',0,255,nothing)
+        cv2.createTrackbar('Ecart','image',0,255,nothing)
+        cv2.createTrackbar('S_MAX','image',0,255,nothing)
+        cv2.createTrackbar('V_MAX','image',0,255,nothing)
+        while(True):
+            #Mettre en commentaire pour utilisation
+            #Techargement des parametres
+            H_MID = cv2.getTrackbarPos('H_MID','image')
+            S_MIN = cv2.getTrackbarPos('S_MIN','image')
+            V_MIN = cv2.getTrackbarPos('V_MIN','image')
+            Ecart = cv2.getTrackbarPos('Ecart','image')
+            S_MAX = cv2.getTrackbarPos('S_MAX','image')
+            V_MAX = cv2.getTrackbarPos('V_MAX','image')
+            #ParamErode = cv2.getTrackbarPos('Erode','image')
+            #Determination de l'erreur
+            H_MAX = H_MID + Ecart
+            H_MIN = H_MID - Ecart
+            #creation de tableau de parametre pour le treashold
+            COULEUR_MIN = np.array([H_MIN, S_MIN, V_MIN],np.uint8)
+            COULEUR_MAX = np.array([H_MAX, S_MAX, V_MAX],np.uint8)
+            ParamErode = 3    
+            # Capture frame-by-frame
+            _, frame = self.camera.read()
+            element = cv2.getStructuringElement(cv2.MORPH_CROSS,(ParamErode,ParamErode))
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            Frame_hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            Frame_blur = cv2.GaussianBlur(Frame_hsv ,(5,5),0)
+            Frame_threshed = cv2.inRange(Frame_blur, COULEUR_MIN, COULEUR_MAX)
+            Frame_erode = cv2.erode(Frame_threshed ,element,iterations = 3)
+            Frame_dilate = cv2.dilate(Frame_erode,element,iterations = 3)
+            Frame_dilate2 = cv2.dilate(Frame_dilate,element,iterations = 3)
+            Frame_final = cv2.erode(Frame_dilate2,element,iterations = 3) 
+            Frame_FiltreCouleur = cv2.bitwise_and(frame,frame, mask = Frame_final)
+            Frame_melange_gris_threshold = cv2.bitwise_and(gray,gray, mask = cv2.bitwise_not(Frame_final))
+            Frame_falseRGBImage = cv2.merge((Frame_melange_gris_threshold,Frame_melange_gris_threshold,Frame_melange_gris_threshold))
+            Frame_A_Utiliser = (Frame_FiltreCouleur + Frame_falseRGBImage)
+            cv2.imshow('frame',frame)
+            cv2.imshow('frameFiltrer',Frame_final)
+            cv2.imshow('imageResultante', Frame_A_Utiliser)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                print(' H_MIN',H_MIN,'S_MIN',S_MIN,'V_MIN',V_MIN,'H_MAX',H_MAX,'S_MAX',S_MAX,'V_MAX',V_MAX)
+                break
+        # When everything done, release the capture
+        self.camera.release()
+        cv2.destroyAllWindows()
+                
+        

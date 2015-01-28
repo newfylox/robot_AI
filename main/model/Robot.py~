@@ -1,0 +1,130 @@
+from math import sqrt
+import time
+
+from main.hardware.MicroDue import MicroDue  
+from main.hardware.Pololu import Pololu  
+from main.model.Cell import Cell
+from main.model.Electromagnet import Electromagnet  
+from main.model.Map import Map
+from main.model.Position import Position
+from main.model.TrajectoryPlanner import TrajectoryPlanner
+from main.vision.Camera import Camera  
+
+
+ANGLE_FOR_CARDINAL = {'S':0, 'SE':45, 'E':90, 'NE':135, 'N':180, 'NO':225, 'O':270, 'SO':315}
+
+class Robot(object):
+
+    def __init__(self, queue):
+        self.queue = queue
+        self.active = False
+        
+        self.position = Position(40, 100)
+        self.angle = 0
+
+        self.microDue = MicroDue()
+        self.pololu = Pololu()
+        self.camera = Camera()
+        self.electromagnet = Electromagnet(self.microDue,self.pololu)
+        self.numberOfUpdate = 0
+        self.obstacleOnePosition = Position(0, 0)
+        self.obstacleTwoPosition = Position(0, 0)
+
+        self.initMap()
+        self.trajectoryPlanner = TrajectoryPlanner(self.map, False)
+        
+    def initMap(self):
+        self.map = Map(Cell(5))
+        
+    def refreshObstaclePosition(self):
+        lastUpdate = self.numberOfUpdate
+        self.queue.put("REQUESTOBSTACLESPOSITION")
+        while self.numberOfUpdate == lastUpdate:
+            time.sleep(0.1)
+
+    def refreshPositionAndAngle(self):
+        lastUpdate = self.numberOfUpdate
+        self.queue.put("REQUESTPOSITION")
+        while self.numberOfUpdate == lastUpdate:
+            time.sleep(0.1)
+            
+    def refreshAngle(self):
+        lastUpdate = self.numberOfUpdate
+        self.queue.put("REQUESTANGLE")
+        while self.numberOfUpdate == lastUpdate:
+            time.sleep(0.1)
+        
+    def moveToPosition(self, position):  
+#         self.refreshPositionAndAngle()
+        self.trajectoryPlanner.reset()
+        self.trajectoryPlanner.clearMap()
+        self.trajectoryPlanner.clearPropagation()
+        listOfDirections = self.trajectoryPlanner.getDirections(self.getPosition(), position)
+        self.queue.put("LB-" + str(listOfDirections))
+	print "angle de depart = " + str(self.angle)
+        for moves in listOfDirections:
+            move = moves.split('-',1)
+            distance = 0  # @UnusedVariable
+            
+            if (len(move[1]) == 2):
+                distance = int(round(sqrt(2*((int(move[0])*self.map.cellDimension)**2)),0))  # @UnusedVariable
+            else:
+                distance = int(move[0])  # @UnusedVariable
+	    print "debut rotate Angle!!!!!"            
+            self.rotateToAngle(ANGLE_FOR_CARDINAL.get(move[1]))
+	    self.angle = 270
+	    print "Fin de rotate Angle!!!!!"
+
+            self.microDue.moveForward(distance)      
+	    print "Fin de move forward"
+
+    def rotateToAngle(self, angle):
+#         self.refreshAngle()
+
+        if int(self.angle) != angle:
+            deltaAngle = int(self.angle) - angle
+            clockwise = (deltaAngle > 0)
+            deltaAngle = abs(deltaAngle)
+            if (deltaAngle > 180):
+                clockwise = not clockwise
+                deltaAngle = 360 - deltaAngle
+            if clockwise:
+                pass
+#                 print "Clockwise: " + str(deltaAngle)
+                self.microDue.rotateClockwise(deltaAngle)
+            else:
+                pass
+#                 print "CounterClockwise: " + str(deltaAngle)
+                self.microDue.rotateCounterClockwise(deltaAngle)
+	self.queue.put("LB-" + "Fin de fonction rotateANgle")
+
+    def isActive(self):
+        return self.active
+
+    def doAction(self):
+        self.currentState.doAction()
+        
+    def grabPuck(self):     
+        self.electromagnet.goDown()
+        self.electromagnet.activate()
+        self.electromagnet.goUp()
+        
+    def dropPuck(self):     
+        self.electromagnet.goDown()
+        self.electromagnet.desactivate()
+        self.electromagnet.goUp()
+        
+    def updatePosition(self, newPosition):
+        self.position = newPosition
+
+    def updateAngle(self, newAngle):
+        self.angle = newAngle
+
+    def getPosition(self):
+        return self.position
+    
+    def getAngle(self):
+        return self.angle
+    
+
+    

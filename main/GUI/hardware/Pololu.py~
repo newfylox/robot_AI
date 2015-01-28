@@ -1,0 +1,49 @@
+import serial
+
+
+class Pololu(object):
+    
+    def __init__(self):
+        pass
+        self.sc = serial.Serial('/dev/serial/by-id/usb-Pololu_Corporation_Pololu_Micro_Maestro_6-Servo_Controller_00046502-if00')
+        # deja en com self.sc = serial.Serial('/dev/serial/by-id/usb-Pololu_Corporation_Pololu_Micro_Maestro_6-Servo_Controller_00046502-if02')
+
+    def electroDown(self):
+        self.setAngle(3, 180)
+        
+    def electroUp(self):
+        self.setAngle(3, 0)
+        
+    def camUp(self):
+        self.setAngle(5, 46)
+        
+    def camDown(self):
+        self.setAngle(5, 0)
+        
+    def camRight(self):
+        self.setAngle(4, 180)
+        
+    def camLeft(self):
+        self.setAngle(4, 0)
+        
+    def camMiddle(self):
+        self.setAngle(4, 90)
+    
+    def closeServo(self):
+        self.sc.close()
+        
+    def setAngle(self, n, angle):
+        if angle > 180 or angle <0:
+            angle=90
+        byteone=int(254*angle/180)
+        bud=chr(0xFF)+chr(n)+chr(byteone)
+        self.sc.write(bud)
+
+    def getErrors(self):
+        data =  chr(0xaa) + chr(0x0c) + chr(0x21)
+        self.sc.write(data)
+        w1 = ord(self.sc.read())
+        w2 = ord(self.sc.read())
+        return w1, w2
+        
+        

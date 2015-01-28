@@ -1,0 +1,344 @@
+import cv2
+import numpy as np
+import time
+from math import *
+
+class Kinect(object):
+
+    # constructeur d'une capture de Kinect
+    def __init__(self):
+        # variable pour les dimensions de la table 
+        self.THETA = 0.465#0.46454759 #radian  
+        self.XTABLE = 52 #cm
+        self.YTABLE = 0 #cm
+        self.kinect =   cv2.VideoCapture(cv2.cv.CV_CAP_OPENNI)
+        #pour initiation
+        flags, img = self.kinect.read()#@UnusedVariable
+        time.sleep(1)
+    
+    #retourne des images de la kinect, brg, depth et mask valide
+    def getImage(self):
+        self.kinect.grab()
+        flags_i, img_brg = self.kinect.retrieve(None, cv2.cv.CV_CAP_OPENNI_BGR_IMAGE)#@UnusedVariable
+        flags_p, img_depth = self.kinect.retrieve(None, cv2.cv.CV_CAP_OPENNI_POINT_CLOUD_MAP)#@UnusedVariable
+        flags_n, img_mask = self.kinect.retrieve(None, cv2.cv.CV_CAP_OPENNI_VALID_DEPTH_MASK)#@UnusedVariable
+        img_HSV  = cv2.cvtColor(img_brg, cv2.COLOR_BGR2HSV)  
+        return img_HSV, img_depth, img_mask
+    
+    #retourne les bons pixels de la couleur demande, jaune,  vert ou rouge
+    def getPixelsCouleur(self, img, couleur=1):
+        if couleur == 1:#jaune
+            S_MIN = 76
+            V_MIN = 131
+            S_MAX = 255
+            V_MAX = 255
+            H_MAX = 28
+            H_MIN = 20
+        elif couleur == 2:#vert
+            S_MIN = 42
+            V_MIN = 47
+            S_MAX = 255
+            V_MAX = 255
+            H_MAX = 72
+            H_MIN = 50
+        elif couleur == 3:#rouge
+            S_MIN = 97
+            V_MIN = 83
+            S_MAX = 255
+            V_MAX = 255
+            H_MAX = 182
+            H_MIN = 152
+        #creer les limite du treshhold selon la couleur
+        element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+        COULEUR_MIN = np.array([H_MIN, S_MIN, V_MIN],np.uint8)
+        COULEUR_MAX = np.array([H_MAX, S_MAX, V_MAX],np.uint8)
+        #filtre l'image
+        Frame_blur = cv2.GaussianBlur(img ,(5,5),0)
+        Frame_threshed = cv2.inRange(Frame_blur, COULEUR_MIN, COULEUR_MAX)
+        Frame_erode = cv2.erode(Frame_threshed ,element,iterations = 3)
+        Frame_dilate = cv2.dilate(Frame_erode,element,iterations = 3)
+        Frame_dilate2 = cv2.dilate(Frame_dilate,element,iterations = 20)
+        img = cv2.erode(Frame_dilate2,element,iterations = 20) 
+        
+        #liste les pixels trouve selon la couleur
+        listpixels = []
+        height, width = img.shape # @UnusedVariable
+        for y in range(width):
+            for x in range(195):
+                if img[x][y] == 255:
+                    listpixels.append((x,y))
+        return listpixels, img
+    
+    #trouve la median de la distance xy des pixels trouve
+    def getdistanceXY(self, img, mask, pixels):
+        xl = []
+        yl = []
+        for i in range(len(pixels)):
+            x = pixels[i][0]
+            y = pixels[i][1]
+            #verifie s'ils sont bon
+            if mask[x,y] == 255:
+                x1 = img[x,y][2]
+                y1 = img[x,y][0]
+                thetaTemp = atan((y1/x1))
+                #ajuste selon l'angle de la kinect
+                angle = self.THETA-thetaTemp
+                x2 = y1/sin(thetaTemp)
+                x = (cos(angle)*x2*100)-self.XTABLE
+                y = (sin(angle)*x2*100)-self.YTABLE
+                #ydiff = (0.098*x) - 9
+                #y = y-ydiff
+                if x<235 and x>-5:
+                    if y<120 and y>-5:
+                        xl.append(img[x,y][2])
+                        yl.append(img[x,y][0])
+        #trouve les medians
+        x1 = self.median(xl)
+        y1 = self.median(yl)
+        if x1 == None or y1 == None:
+            return None, None
+        return x, y
+    
+    # trouve l'angle du robot
+    def getAngle(self):
+        #recupere une image
+        img, depth, mask = self.getImage()
+        #recupere les pixels des boules aux extremites
+        pixels1, img1 = self.getPixelsCouleur(img, 1) #@UnusedVariable
+        pixels2, img2 = self.getPixelsCouleur(img, 2) #@UnusedVariable
+        pixels3, img3 = self.getPixelsCouleur(img, 3) #@UnusedVariable
+        #tout est par la boule jaune
+        if len(pixels3)<7 and len(pixels2)<7:
+            theta = self.THETA + pi/2
+        #tout est par la boule rouge
+        elif len(pixels1)<7 and len(pixels2)<7:
+            theta = self.THETA + 3*pi/2
+        #si boule jaune cache       
+        elif len(pixels1)<7:
+            x3, y3 = self.getdistanceXY(depth, mask, pixels3)
+            x2, y2 = self.getdistanceXY(depth, mask, pixels2)
+            if x2==None or y2==None:
+                return None
+            if x3==None or y3==None:
+                return None
+            #calcul angle
+            if x2>x3:
+                xT = x2-x3
+                if y2>y3:
+                    yT = y2-y3
+                    theta = (pi/2-atan(xT/yT))+3*pi/2
+                else:
+                    yT = y3-y2 
+                    theta = atan(xT/yT)+pi         
+            else:
+                xT = x3-x2
+                if y2>y3:
+                    yT = y2-y3
+                    theta = atan(xT/yT)
+                else:
+                    yT = y3-y2  
+                    theta = (pi/2-atan(xT/yT)) + pi/2
+        #si boule rouge cache
+        elif len(pixels3)<7:
+            x1, y1 = self.getdistanceXY(depth, mask, pixels1)
+            x2, y2 = self.getdistanceXY(depth, mask, pixels2)
+            if x1==None or y1==None:
+                return None
+            if x2==None or y2==None:
+                return None
+            #calcul angle
+            if x2>x1:
+                xT = x2-x1
+                if y2>y1:
+                    yT = y2-y1
+                    theta = (pi/2-atan(xT/yT))+pi/2
+                else:
+                    yT = y1-y2 
+                    theta = atan(xT/yT)         
+            else:
+                xT = x1-x2
+                if y2>y1:
+                    yT = y2-y1
+                    theta = atan(xT/yT) + pi
+                else:
+                    yT = y1-y2 
+                    theta = (pi/2-atan(xT/yT)) + 3*pi/2
+        #boules aux extremites
+        else:
+            x1, y1 = self.getdistanceXY(depth, mask, pixels1)
+            x3, y3 = self.getdistanceXY(depth, mask, pixels3)
+            if x1==None or y1==None:
+                return None
+            if x3==None or y3==None:
+                return None
+            #calcul angle
+            if x3>x1:
+                xT = x3-x1
+                if y3>y1:
+                    yT = y3-y1
+                    theta = (pi/2-atan(xT/yT))+pi/2
+                else:
+                    yT = y1-y3 
+                    print xT, yT
+                    theta = atan(xT/yT)          
+            else:
+                xT = x1-x3
+                if y3>y1:
+                    yT = y3-y1
+                    theta = atan(xT/yT) + pi
+                else:
+                    yT = y1-y3 
+                    theta = (pi/2-atan(xT/yT)) + 3*pi/2
+        #retourne angle en degree
+        angleEnDegree = np.rad2deg(theta)
+        return angleEnDegree
+            
+    #trouve la position du robot
+    def getPosition(self):
+        #recupere une image
+        img, depth, mask = self.getImage()
+        pixels1, img2 = self.getPixelsCouleur(img, 1) #@UnusedVariable
+        pixels2, img2 = self.getPixelsCouleur(img, 2) #@UnusedVariable
+        pixels3, img2 = self.getPixelsCouleur(img, 3) #@UnusedVariable
+        #si boule verte visible
+        if len(pixels2)>7:
+            x, y = self.getdistanceXY(depth, mask, pixels2)
+            if x==None or y==None:
+                return None, None
+            return x+3.5, y# +3.5 pour le centre de la boule
+        #sinon calcule avec les deux boules aux extremites
+        #tout est par la boule jaune
+        elif len(pixels3)<7 and len(pixels2)<7:
+            x, y = self.getdistanceXY(depth, mask, pixels1)
+            if x==None or y==None:
+                return None, None
+            x = x+19
+            y = y+8
+            return x, y, img
+        #tout est par la boule rouge
+        elif len(pixels1)<7 and len(pixels2)<7:
+            x, y = self.getdistanceXY(depth, mask, pixels3)
+            if x==None or y==None:
+                return None, None
+            x = x+19
+            y = y+8
+            return x, y
+        #si boule jaune cache  
+        else:
+            x1, y1 = self.getdistanceXY(depth, mask, pixels1)
+            x2, y2 = self.getdistanceXY(depth, mask, pixels3)
+            if x1==None or y1==None:
+                return None, None
+            if x2==None or y2==None:
+                return None, None
+            #calcule position
+            if x1>x2:
+                xT = (x1-x2)/2
+                x = x2+xT
+                if y1>y2:
+                    yT = (y1-y2)/2
+                    y = y2+yT
+                else:
+                    yT = (y2-y1)/2
+                    y = y1+yT            
+            else:
+                xT = (x2-x1)/2
+                x = x1+xT
+                if y1>y2:
+                    yT = (y1-y2)/2
+                    y = y2+yT
+                else:
+                    yT = (y2-y1)/2
+                    y = y1+yT
+            return x, y
+        
+    def getTower(self):
+        img, depth, mask = self.getImage() #@UnusedVariable
+        #on trouve les pixels des deux tours
+        list1, list2, img = self.getPixelsTowers(img)
+        print list1
+        print list2
+        x1, y1 = self.getdistanceXY(depth, mask, list1)
+        x2, y2 = self.getdistanceXY(depth, mask, list2)
+        if x1==None or y1==None:
+            if x2!=None and y2!=None:
+                tower2 = (x2+6.5, y2)
+                return None, tower2, img
+        if x2==None or y2==None:
+            if x1!=None and y1!=None:
+                tower1 = (x1+6.5, y1)
+                return tower1, None, img
+        if x2==None or y2==None:
+            if x1==None or y1==None:
+                return None, None, img
+        tower1 = (x1+6.5, y1)
+        tower2 = (x2+6.5, y2)
+        return tower1, tower2, img
+        
+        
+    def getPixelsTowers(self, img,):
+        S_MIN = 101 # on cherche du rouge
+        V_MIN = 90
+        S_MAX = 255
+        V_MAX = 192
+        H_MAX = 196
+        H_MIN = 16
+        #creer les limite du treshhold selon la couleur
+        element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+        COULEUR_MIN = np.array([H_MIN, S_MIN, V_MIN],np.uint8)
+        COULEUR_MAX = np.array([H_MAX, S_MAX, V_MAX],np.uint8)
+       
+        Frame_blur = cv2.GaussianBlur(img ,(5,5),0)
+        Frame_threshed = cv2.inRange(Frame_blur, COULEUR_MIN, COULEUR_MAX)
+        Frame_erode = cv2.erode(Frame_threshed ,element,iterations = 3)
+        Frame_dilate = cv2.dilate(Frame_erode,element,iterations = 3)
+        Frame_dilate2 = cv2.dilate(Frame_dilate,element,iterations = 20)
+        img = cv2.erode(Frame_dilate2,element,iterations = 20) 
+               
+        #liste les pixels trouve selon la couleur
+        listpixels = []
+        height, width = img.shape # @UnusedVariable
+        for y in range(390):
+            y = y+250
+            for x in range(101):
+                x=x+140
+                if img[x][y] == 255:
+                    listpixels.append((x,y))
+        #separe les deux toursen deux listes
+        list1 = []
+        list2 = []
+        list1.append(listpixels[0])  
+        sumx = 0
+        sumy = 0     
+        for i in range(len(listpixels)):
+            sumx = sumx+listpixels[0][0]
+            sumy = sumy+listpixels[0][1]  
+            moyx = float(sumx)/len(list1)
+            moyy = float(sumy)/len(list1)
+            xdiff = listpixels[i][0]-moyx
+            ydiff = listpixels[i][1]-moyy
+            if fabs(xdiff)>18 or fabs(ydiff)>18:
+                list2.append(listpixels[i])
+            else:
+                list1.append(listpixels[i])
+        return list1, list2, img
+        
+        
+    #fonction pour la median d'une liste
+    def median(self, mylist):
+        if len(mylist)==0:
+            return None
+        sorts = sorted(mylist)
+        length = len(sorts)
+        if not length % 2:
+            return (sorts[length / 2] + sorts[length / 2 - 1]) / 2.0
+        return sorts[length / 2]
+    
+    #fonction de test pour afficher l'image
+    def show(self, img):
+        while(1):
+            cv2.imshow('Affichage', img)  
+            cc = cv2.waitKey(10)
+            if cc == 27: # Touche Echap quitte
+                break
+            

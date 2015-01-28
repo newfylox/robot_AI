@@ -1,0 +1,61 @@
+from main.states.GameState import GameState
+from main.states.HasPuckState import HasPuckState
+
+class NearPucksState(GameState):
+
+    def doAction(self):
+        self.game.queue.put("LB-" + self.nameMyself())
+        
+        #Search if there's a puck with highest priority to be placed
+        puckToFind = -1
+        indice = 0
+        while puckToFind == -1 and indice < 3:
+            if self.game.listOfPucks[indice].hasBeenPlaced == False and self.game.listOfPucks[indice].priority == 1:
+                puckToFind = indice
+            indice = indice + 1
+            
+        #Search if there's a puck with lowest priority to be placed    
+        indice = 0   
+        if puckToFind == -1:
+            while puckToFind == -1 and indice < 3:
+                if self.game.listOfPucks[indice].hasBeenPlaced == False and self.game.listOfPucks[indice].priority == 2:
+                    puckToFind = indice
+                indice = indice + 1
+        self.game.puckBeingProcessed = puckToFind  
+        self.game.queue.put("LB-" + "puckToFind=" + str(puckToFind))                      
+        puckColorCodeToFind = self.game.listOfPucks[puckToFind].getPrimaryColor()  # @UnusedVariable
+        
+        #Scan the area to search the right puck
+        returnedValue = -1
+        numberOfTry = 0
+        self.game.robot.rotateToAngle(0)
+        angle = 30
+        while returnedValue == -1 and numberOfTry < 6:
+            numberOfTry = numberOfTry + 1
+            returnedValue = self.game.robot.camera.findColor(puckColorCodeToFind)
+            self.game.robot.rotateToAngle(angle)
+            angle = angle + 30
+           
+        if returnedValue == -1:
+            self.game.queue.put("LB-" + "Camera retourne -1!!")
+        else:
+            rotationAngleNeeded , robotDistanceToPuck = self.game.robot.camera.getDistanceToPuck(puckToFind)
+#             rotationAngleNeeded, robotDistanceToPuck = 0,0
+            if rotationAngleNeeded == 0 or robotDistanceToPuck == 0:
+                self.game.queue.put("LB-" + "  rotationAngleNeeded = " + str(rotationAngleNeeded) + "  robotDistanceToPuck = " + str(robotDistanceToPuck) )                
+            
+            self.game.robot.rotateToAngle(0)
+            self.microDue.moveForward(robotDistanceToPuck) 
+            self.game.robot.grabPuck()
+                 
+        self.game.currentState = HasPuckState(self.game)
+                
+    def nameMyself(self):
+        return "NearPucksState"
+
+         
+
+        
+    
+
+        

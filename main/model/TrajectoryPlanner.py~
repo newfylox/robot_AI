@@ -1,0 +1,392 @@
+import time
+
+from main.model.Cell import Cell
+from main.model.Map import Map
+from main.model.Position import Position
+
+
+RESISTANCE_POSITION_1 = Position(24.5, 9.75)
+
+class TrajectoryPlanner:
+
+    def __init__(self, map, showSteps):   # @ReservedAssignment
+        
+        #If TRUE, will print every step of the search    
+        self.showSteps = showSteps
+        
+        #Matrix and its dimension
+        self.map = map
+        self.matrix = map.getMatrix()
+        self.mapHeight = map.mapHeight
+        self.mapWidth = map.mapWidth
+        
+        #Goal position in the matrix
+        self._goal_x, self._goal_y = -1, -1
+        
+        #Robot position in the matrix
+        self._robot_x, self._robot_y = -1, -1
+        
+        #Element definition in the matrix
+        self._nothing = 0
+        self._obstacle = 999
+        self._goal = 1
+        self._robot = 777
+        
+        #Path finding
+        self.path = ""
+        self.__finalPath = []
+
+        #Temporary variables used by fonctions
+        self._temp_A = 0
+        self._temp_B = 0
+        self._counter = 0
+
+
+        #Temporary variables when searching for a node with a lower value
+        self._minimum_node = 666 #Default value 
+        self._reset_min = 666 #Variable used to reset the _minimum_node variable 
+                
+        self._new_state = 1
+        self._old_state = 1
+        
+        #location of the node with the minimum value
+        # 1 = up,   2 = right,   3 = down,   4 = left
+        # 5 = upD,   6 = rD,   7 = dD,  8 = lD
+        self._min_node_location = 666
+        
+    def reset(self):
+        
+        #Goal position in the matrix
+        self._goal_x, self._goal_y = -1, -1
+        
+        #Robot position in the matrix
+        self._robot_x, self._robot_y = -1, -1
+        
+        #Element definition in the matrix
+        self._nothing = 0
+        self._obstacle = 999
+        self._goal = 1
+        self._robot = 777
+        
+        #Path finding
+        self.path = ""
+        self.__finalPath = []
+
+        #Temporary variables used by fonctions
+        self._temp_A = 0
+        self._temp_B = 0
+        self._counter = 0
+
+        #Temporary variables when searching for a node with a lower value
+        self._minimum_node = 666 #Default value 
+        self._reset_min = 666 #Variable used to reset the _minimum_node variable 
+                
+        self._new_state = 1
+        self._old_state = 1
+        
+        #location of the node with the minimum value
+        # 1 = up,   2 = right,   3 = down,   4 = left
+        # 5 = upD,   6 = rD,   7 = dD,  8 = lD
+        self._min_node_location = 666
+        
+    def setRobotPosition(self, x, y):
+        self._robot_x = x
+        self._robot_y = y
+
+    def setGoalPosition(self, x, y):
+        self._goal_x = x
+        self._goal_y = y
+
+    def robotPosition(self):
+        return  (self._robot_x, self._robot_y)
+
+    def goalPosition(self):
+        return  (self._goal_x, self._goal_y)
+
+    def getDirections(self, startPositionXY, endPositionXY):      
+
+	self.queue.put("LB-" + "debut get Direction = " + self.position.toString())
+
+        #Robot and goal position in the matrix
+        self._robot_x, self._robot_y = self.map.translatePositionXYToPositionIJ(startPositionXY)
+        self._goal_x, self._goal_y = self.map.translatePositionXYToPositionIJ(endPositionXY)
+
+
+        
+        print "Robot is at this position : " + str(self._robot_x) + " " + str(self._robot_y)
+        print "  and want to go at this position : " + str(self._goal_x) + " " + str(self._goal_y)
+        path = []
+        path2 = []
+        
+        if (self._robot_x, self._robot_y)  == (self._goal_x, self._goal_y):
+            return []
+        
+        while self.matrix[self._robot_x][self._robot_y] != self._goal:
+            #find new location the robot should go to
+            self._new_state = self.propagateWavefront()
+            #update location of the robot
+            if self._new_state == 1:
+                self._robot_x -= 1
+                if self.showSteps:
+                    print "Move to x = %d and  y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("N")
+                
+            if self._new_state == 2:
+                self._robot_x -= 1
+                self._robot_y += 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("NE")
+                
+            if self._new_state == 3:
+                self._robot_y += 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("E")
+                
+            if self._new_state == 4:
+                self._robot_x += 1
+                self._robot_y += 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("SE")
+                
+            
+            if self._new_state == 5:
+                self._robot_x += 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("S")
+                
+                
+            if self._new_state == 6:
+                self._robot_x += 1
+                self._robot_y -= 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))
+                path2.append("SO")
+                
+            if self._new_state == 7:
+                self._robot_y -= 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))   
+                path2.append("O") 
+                
+            if self._new_state == 8:
+                self._robot_x -= 1
+                self._robot_y -= 1
+                if self.showSteps:
+                    print "Robot is moving to x = %d and y = %d\n\n" % \
+                        (self._robot_x, self._robot_y)
+                path.append((self._robot_x, self._robot_y))    
+                path2.append("NO")
+                
+            self._old_state = self._new_state
+            
+        msg = "Map size = %i x %i\n\n" % (self.mapHeight, self.mapWidth)
+        if self.showSteps:
+            print msg
+            self.printMap()
+        return self.groupDirectionsInPath(path2)
+
+    def propagateWavefront(self):
+
+        self.clearPropagation()
+        #Old robot location was deleted, store new robot location in matrix
+        self.matrix[self._robot_x][self._robot_y] = self._robot
+        self.path = self._robot
+        #getDirections location to begin scan at goal location
+        self.matrix[self._goal_x][self._goal_y] = self._goal
+        counter = 0
+        while counter < 200:  #buffer ...
+            x = 0
+            y = 0
+            #while the matrix hasnt been fully scanned
+            while x < self.mapHeight and y < self.mapWidth:
+                #ignore if its an obstacle or the goal
+                if self.matrix[x][y] != self._obstacle and \
+                    self.matrix[x][y] != self._goal:
+                    #Path found !!!
+                    minLoc = self.minimumSurroundingNodeValue(x, y)
+                    if minLoc < self._reset_min and \
+                        self.matrix[x][y] == self._robot:
+                        if self.showSteps:
+                            print "The Wavefront is finished:\n"
+                            self.printMap()
+                        # Tell the robot to move after this return.
+                        return self._min_node_location
+                    #record a value in to this node
+                    elif self._minimum_node != self._reset_min:
+                        #if this isnt here, 'nothing' will go in the location
+                        self.matrix[x][y] = self._minimum_node + 1
+                #go to next node and/or row
+                y += 1
+                if y == self.mapWidth and x != self.mapHeight:
+                    x += 1
+                    y = 0
+            #print self._robot_x, self._robot_y
+            if self.showSteps:
+                print "Sweep # %i\n" % (counter + 1)
+                self.printMap()
+            counter += 1
+        return 0
+    
+
+    def clearPropagation(self):
+        for x in range(0, self.mapHeight):
+            for y in range(0, self.mapWidth):
+                if self.matrix[x][y] != self._obstacle and self.matrix[x][y] != self._goal and \
+                    self.matrix[x][y] != self.path:
+                    self.matrix[x][y] = self._nothing 
+                    
+    def clearMap(self):
+        for x in range(0, self.mapHeight):
+            for y in range(0, self.mapWidth):
+                if self.matrix[x][y] != self._obstacle: 
+                    self.matrix[x][y] = self._nothing 
+
+
+    ###########################################################################
+
+    def minimumSurroundingNodeValue(self, x, y):
+        
+        "minimumSurroundingNodeValue looks at a node at the" 
+        "position given and returns the lowest value around that node"
+
+        #reset minimum
+        self._minimum_node = self._reset_min
+        
+        #down si pas le dernier on check lui avant
+        if x < self.mapHeight - 1:
+            if self.matrix[x + 1][y] < self._minimum_node and \
+                self.matrix[x + 1][y] != self._nothing:
+                #find the lowest number node, and exclude empty nodes (0's)
+                self._minimum_node = self.matrix[x + 1][y]
+                self._min_node_location = 5
+                
+        #up  si pas le premier on check lui avant
+        if x > 0:
+            if self.matrix[x-1][y] < self._minimum_node and \
+                self.matrix[x-1][y] != self._nothing:
+                self._minimum_node = self.matrix[x-1][y]
+                self._min_node_location = 1
+                
+        #right si pas le dernier on check lui avant
+        if y < self.mapWidth - 1:
+            if self.matrix[x][y + 1] < self._minimum_node and \
+                self.matrix[x][y + 1] != self._nothing:
+                self._minimum_node = self.matrix[x][y + 1]
+                self._min_node_location = 3
+                
+        #left   si pas le premier on check lui avant
+        if y > 0: 
+            if self.matrix[x][y - 1] < self._minimum_node and \
+                self.matrix[x][y - 1] != self._nothing:
+                self._minimum_node = self.matrix[x][y-1]
+                self._min_node_location = 7
+                
+        #Diagonale en haut a gauche   
+        if x > 0  and y > 0: 
+            if self.matrix[x - 1][y - 1] < self._minimum_node and \
+                self.matrix[x - 1][y - 1] != self._nothing:
+                self._minimum_node = self.matrix[x-1][y-1]
+                self._min_node_location = 8
+                
+        #Diagonale en haut a droite   
+        if x > 0  and y < self.mapWidth - 1: 
+            if self.matrix[x - 1][y + 1] < self._minimum_node and \
+                self.matrix[x - 1][y + 1] != self._nothing:
+                self._minimum_node = self.matrix[x-1][y+1]
+                self._min_node_location = 2
+                
+        #Diagonale en bas a gauche  
+        if x < self.mapHeight - 1  and y > 0: 
+            if self.matrix[x + 1][y - 1] < self._minimum_node and \
+                self.matrix[x + 1][y - 1] != self._nothing:
+                self._minimum_node = self.matrix[x+1][y-1]
+                self._min_node_location = 6
+                
+        #Diagonale en bas a droite
+        if x < self.mapHeight - 1  and y < self.mapWidth - 1: 
+            if self.matrix[x + 1][y + 1] < self._minimum_node and \
+                self.matrix[x + 1][y + 1] != self._nothing:
+                self._minimum_node = self.matrix[x+1][y+1]
+                self._min_node_location = 4
+                
+                
+        return self._minimum_node
+
+    def printMap(self):
+        lign = ''
+        for temp_B in range(0, self.mapHeight):
+            for temp_A in range(0, self.mapWidth):
+                if self.matrix[temp_B][temp_A] == self._obstacle:
+                    lign += "%4s" % "[X]"
+                elif self.matrix[temp_B][temp_A] == self._robot:
+                    lign += "%4s" % "-"
+                elif self.matrix[temp_B][temp_A] == self._goal:
+                    lign += "%4s" % "!"
+                else:
+                    lign += "%4s" % str(self.matrix[temp_B][temp_A])
+            lign += "\n\n"
+        lign += "\n\n"
+        print lign
+        
+    def groupDirectionsInPath(self, aList):
+        indice = 0
+        finalList = []
+        numberOfRepetitions = 1
+
+        while (indice < len(aList)):
+            element = aList[indice]
+            while indice + 1 < len(aList) and aList[indice+1] == element:
+                    numberOfRepetitions = numberOfRepetitions + 1
+                    indice = indice + 1
+            finalList.append(str(str(numberOfRepetitions)+"-" + element))
+            indice = indice + 1
+            numberOfRepetitions=1
+                
+        return finalList
+
+if __name__ == "__main__":
+
+    #Une liste de liste
+    floormap = [[000,000,000,000], \
+                [000,999,999,000], \
+                [000,999,000,000], \
+                [000,000,000,000]]
+
+
+    mapp = Map(Cell(5))   
+    mapp.addObstacle(Position(140, 50))
+    
+
+
+    start = time.time()
+    
+    "That means the robot getDirections at (0,0) and the goal point is at (3,3)"
+    "the 'True' value means i want the algorithm to print all of its steps"
+    TracjectoryPlanner = TrajectoryPlanner(mapp, True)
+    print "map width finale = " + str(TracjectoryPlanner.mapWidth)
+#     pathy, pathy2 =  TracjectoryPlanner.getDirections()
+    
+    print TracjectoryPlanner.getDirections(Position(20, 20), Position(15,30))
+    end = time.time()
+    
+    print "Running time of the wavefront simulation with cell of 5cm = %f seconds" % (end - start)
+  
+    

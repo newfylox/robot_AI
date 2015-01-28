@@ -1,0 +1,83 @@
+from main.model.Table import Table
+from main.states.NoResistanceValueState import NoResistanceValueState
+
+
+class Game(object):
+    
+    def __init__(self, robot, queue):
+        self.queue = queue
+        self.robot = robot
+        self.currentState = NoResistanceValueState(self)        
+        self.status = "Stopped"
+        
+        self.listOfPucks = []      
+        self.puckBeingProcessed = -1
+        self.positionToReadInLetterBoard = -1
+        self.positionToReadInOrientationBoard = -1
+        self.resistanceValue = -1
+        self.pucksOrientation = ""
+        self.table = Table() 
+        
+    def doAction(self):
+        self.currentState.doAction() 
+   
+    def getCurrentStateName(self):
+        return self.currentState.nameMyself()   
+
+    def setPositionToReadInLetterBoard(self, newPosition):
+        self.positionToReadInLetterBoard = newPosition
+
+    def getPositionToReadInLetterBoard(self):
+        return self.positionToReadInLetterBoard
+    
+    def setPositionToReadInOrientationBoard(self, newPosition):
+        self.positionToReadInOrientationBoard = newPosition    
+
+    def getPositionToReadInOrientationBoard(self):
+        return self.positionToReadInOrientationBoard
+    
+    def getPucksOrientation(self):
+        return self.pucksOrientation
+    
+    def setPucksOrientation(self, newOrientation):
+        self.pucksOrientation = newOrientation
+      
+    def isFinished(self):
+        numberOfPucksPlaced = 0
+        for puck in self.listOfPucks:
+            if puck.hasBeenPlaced == True:
+                numberOfPucksPlaced = numberOfPucksPlaced + 1
+        return numberOfPucksPlaced >=3
+    
+    def stop(self):
+        self.status = "Stopped"
+        
+    def isInProcess(self):
+        if (self.status == "Started") : 
+            return True
+        else:
+            return False
+        
+    def start(self):
+        self.status = "Started"
+        
+    def changeStatusToFinish(self):
+        self.status = "Finished"
+
+    def reset(self):
+        self.stop()
+        self.currentState = NoResistanceValueState(self.robot)
+        self.listOfPucks = []      
+        self.positionToReadInLetterBoard = -1
+        self.positionToReadInOrientationBoard = -1
+        self.resistanceValue = -1
+        self.pucksOrientation = ""
+        self.firstCornerToPlacePuck = ""
+        
+    def printGameStatus(self):
+        print " --" + self.currentState.nameMyself()
+        for puck in self.listOfPucks:
+            print " --" + puck.primaryColor + "-" + puck.secondaryColor + "-" + puck.cornerToBePlaced
+        print " --" + self.pucksOrientation
+        print " --" + str(self.robot.position.getX()) + " , " + str(self.robot.position.getY())
+        print " --" + str(self.robot.getAngle())
